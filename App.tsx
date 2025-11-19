@@ -1,13 +1,12 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import type { EditMode, CollageLayoutType, AiStyle } from './types';
+import type { EditMode, CollageLayoutType } from './types';
 import HomeView from './components/views/HomeView';
 import Header from './components/editor/Header';
 import Toolbar from './components/editor/Toolbar';
 import MainContent from './components/editor/MainContent';
 import PropertiesPanel from './components/editor/PropertiesPanel';
 import SettingsModal from './components/modals/SettingsModal';
-import { editImageWithGemini, removeBackgroundWithGemini } from './services/geminiService';
+import { processTgaFile } from './services/tgaParser';
 
 
 export default function App() {
@@ -42,17 +41,14 @@ export default function App() {
   // Crop State
   const [cropRect, setCropRect] = useState<{x: number, y: number, width: number, height: number} | null>(null);
 
-  // AI Edit State
-  const [aiPrompt, setAiPrompt] = useState('');
-  const [aiGenWidth, setAiGenWidth] = useState(800);
-  const [aiGenHeight, setAiGenHeight] = useState(600);
-  const [aiStyle, setAiStyle] = useState<AiStyle>('None');
-  const [error, setError] = useState<string | null>(null);
-
   // Cutout State
   const [cutoutColor, setCutoutColor] = useState('#ffffff');
   const [cutoutTolerance, setCutoutTolerance] = useState(30);
   const [cutoutSoftness, setCutoutSoftness] = useState(0);
+
+  // Convert State
+  const [convertFormat, setConvertFormat] = useState<string>('image/png');
+  const [convertQuality, setConvertQuality] = useState<number>(0.92);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -118,10 +114,6 @@ export default function App() {
     if (currentImage) {
       setResizeWidth(currentImage.width);
       setResizeHeight(currentImage.height);
-      
-      // Initialize AI gen dimensions to current image
-      setAiGenWidth(currentImage.width);
-      setAiGenHeight(currentImage.height);
     }
   }, [currentImage]);
   
@@ -136,39 +128,74 @@ export default function App() {
     }
   }, [currentImage, drawImage, colorAdjustments, editMode, rotationAngle]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const loadStandardImage = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        setHistory([img]);
+        setHistoryIndex(0);
+        setCollageImages([]);
+        setZoom(100);
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setImageName(file.name);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const img = new Image();
-        img.onload = () => {
-          setHistory([img]);
-          setHistoryIndex(0);
-          setCollageImages([]);
-          setZoom(100);
-        };
-        img.src = event.target?.result as string;
-      };
-      reader.readAsDataURL(file);
+      
+      if (file.name.toLowerCase().endsWith('.tga')) {
+          try {
+              const dataUrl = await processTgaFile(file);
+              const img = new Image();
+              img.onload = () => {
+                  setHistory([img]);
+                  setHistoryIndex(0);
+                  setCollageImages([]);
+                  setZoom(100);
+              };
+              img.src = dataUrl;
+          } catch (err) {
+              console.error("Failed to load TGA:", err);
+              alert("Failed to load TGA file. Ensure it is uncompressed RGB/RGBA.");
+          }
+      } else {
+          loadStandardImage(file);
+      }
     }
   };
 
   const handleCollageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files) {
-      Array.from(files).forEach(file => {
+      Array.from(files).forEach(async (file) => {
         if (file instanceof File) {
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            const img = new Image();
-            img.onload = () => {
-              setCollageImages(prev => [...prev, img]);
-            };
-            img.src = event.target?.result as string;
-          };
-          reader.readAsDataURL(file);
+            if (file.name.toLowerCase().endsWith('.tga')) {
+                try {
+                    const dataUrl = await processTgaFile(file);
+                    const img = new Image();
+                    img.onload = () => {
+                        setCollageImages(prev => [...prev, img]);
+                    };
+                    img.src = dataUrl;
+                } catch (err) {
+                    console.error("Error loading collage TGA", err);
+                }
+            } else {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.onload = () => {
+                    setCollageImages(prev => [...prev, img]);
+                    };
+                    img.src = event.target?.result as string;
+                };
+                reader.readAsDataURL(file);
+            }
         }
       });
     }
@@ -270,7 +297,7 @@ export default function App() {
     setRotationAngle(0);
   };
 
-  const applyGrayscale = () => {
+  const applyGrayscale = (type: 'max' | 'average' | 'weighted') => {
     if (!currentImage || !canvasRef.current) return;
     drawImage(currentImage);
     const canvas = canvasRef.current;
@@ -278,10 +305,26 @@ export default function App() {
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
     for (let i = 0; i < data.length; i += 4) {
-      const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-      data[i] = avg;
-      data[i + 1] = avg;
-      data[i + 2] = avg;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      
+      let gray = 0;
+      
+      if (type === 'max') {
+          // Method 1: Max Value (VFX)
+          gray = Math.max(r, g, b);
+      } else if (type === 'weighted') {
+          // Method 3: Weighted Formula (Standard)
+          gray = r * 0.299 + g * 0.587 + b * 0.114;
+      } else {
+          // Method 2: Average Value (VFX) - Default
+          gray = (r + g + b) / 3;
+      }
+
+      data[i] = gray;
+      data[i + 1] = gray;
+      data[i + 2] = gray;
       // Note: We do NOT touch data[i+3] (Alpha), so transparency is preserved.
     }
     ctx.putImageData(imageData, 0, 0);
@@ -427,34 +470,46 @@ export default function App() {
       }, 50);
   };
 
-  const handleAiRemoveBackground = async () => {
-    if (!currentImage) return;
+  // NEW FUNCTION: Remove Black Background (Unmultiply Alpha logic)
+  const handleRemoveBlackBackground = () => {
+    if (!canvasRef.current || isProcessing) return;
     setIsProcessing(true);
-    setError(null);
-    try {
-        const dataUrl = currentImage.src;
-        // Robust extraction
-        if (!dataUrl.startsWith('data:')) throw new Error("Invalid image data.");
-        
-        const mimeType = dataUrl.substring(dataUrl.indexOf(':') + 1, dataUrl.indexOf(';')) || 'image/png';
-        const base64Data = dataUrl.split(',')[1];
-        
-        if (!base64Data) throw new Error("Failed to extract image data.");
-        
-        const resultBase64 = await removeBackgroundWithGemini(base64Data, mimeType);
-        
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        img.onload = () => {
-            addNewStateToHistory(img);
-        };
-        img.src = `data:image/png;base64,${resultBase64}`;
 
-    } catch (e) {
-        setError((e as Error).message || "Failed to remove background.");
-    } finally {
+    setTimeout(() => {
+        const canvas = canvasRef.current!;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+
+        for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+
+            // Calculate the maximum brightness of the pixel (0-255)
+            const max = Math.max(r, g, b);
+
+            if (max === 0) {
+                // Pure black becomes fully transparent
+                data[i + 3] = 0;
+            } else {
+                // Set Alpha to the brightness (Unmultiply)
+                // This makes darker colors more transparent, effectively removing the black background
+                data[i + 3] = max;
+
+                // Normalize RGB values to preserve color intensity even when transparent
+                // Formula: NewColor = (OldColor / Alpha) * 255
+                // This ensures that when blended back over black, it looks like the original
+                data[i] = (r / max) * 255;
+                data[i + 1] = (g / max) * 255;
+                data[i + 2] = (b / max) * 255;
+            }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+        updateCurrentImageFromCanvas();
         setIsProcessing(false);
-    }
+    }, 50);
   };
 
   const applyResize = () => {
@@ -529,59 +584,6 @@ export default function App() {
     img.src = dataUrl;
   };
 
-  const handleAiEdit = async () => {
-    if (!currentImage || !aiPrompt) return;
-
-    setIsProcessing(true);
-    setError(null);
-    try {
-        const dataUrl = currentImage.src;
-        
-        // Check validity
-        if (!dataUrl.startsWith('data:')) throw new Error("Invalid image data source.");
-
-        const mimeType = dataUrl.substring(dataUrl.indexOf(':') + 1, dataUrl.indexOf(';')) || 'image/png';
-        const base64Data = dataUrl.split(',')[1];
-        
-        if (!base64Data) throw new Error("Could not extract base64 data from image.");
-        
-        // Construct a prompt that includes style
-        let finalPrompt = aiPrompt;
-        if (aiStyle !== 'None') {
-            finalPrompt = `Apply a ${aiStyle} artistic style to this image. ${aiPrompt}`;
-        }
-
-        const resultBase64 = await editImageWithGemini(base64Data, mimeType, finalPrompt);
-        
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        img.onload = () => {
-            // Handle generated image with specific dimensions
-            if (canvasRef.current) {
-                const canvas = canvasRef.current;
-                const ctx = canvas.getContext('2d')!;
-                
-                // Resize canvas to requested AI dimensions
-                canvas.width = aiGenWidth;
-                canvas.height = aiGenHeight;
-                
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                
-                // Draw the AI result scaled to the requested dimensions
-                ctx.drawImage(img, 0, 0, aiGenWidth, aiGenHeight);
-                
-                updateCurrentImageFromCanvas();
-            }
-        };
-        img.src = `data:image/png;base64,${resultBase64}`;
-
-    } catch (e) {
-        setError((e as Error).message || "An unknown error occurred.");
-    } finally {
-        setIsProcessing(false);
-    }
-  };
-
   const handleDownload = () => {
     const canvas = canvasRef.current;
     if (canvas) {
@@ -594,6 +596,25 @@ export default function App() {
       link.download = `${fileName}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
+    }
+  };
+
+  const handleConvertDownload = () => {
+    const canvas = canvasRef.current;
+    if (canvas) {
+        const link = document.createElement('a');
+        let fileName = imageName || 'converted-image';
+        fileName = fileName.replace(/\.[^/.]+$/, "");
+        
+        // Determine extension
+        let ext = '.png';
+        if (convertFormat === 'image/jpeg') ext = '.jpg';
+        if (convertFormat === 'image/webp') ext = '.webp';
+        
+        link.download = `${fileName}${ext}`;
+        // Use format and quality
+        link.href = canvas.toDataURL(convertFormat, convertQuality);
+        link.click();
     }
   };
   
@@ -634,9 +655,6 @@ export default function App() {
             '--color-text': theme.textColor,
         } as React.CSSProperties}>
             <HomeView onSelection={handleHomeSelection} />
-            {/* Also allow settings from Home? Or just Editor? User said "Top function bar", usually in Editor. 
-                If needed in Home, we can add a button there too. For now, following design of HomeView. 
-            */}
         </div>
     );
   }
@@ -656,8 +674,8 @@ export default function App() {
             color: 'var(--color-text)'
         } as React.CSSProperties}
     >
-      <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
-      <input type="file" ref={collageFileInputRef} onChange={handleCollageFileChange} accept="image/*" multiple className="hidden" />
+      <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*, .tga" className="hidden" />
+      <input type="file" ref={collageFileInputRef} onChange={handleCollageFileChange} accept="image/*, .tga" multiple className="hidden" />
 
       <Header
         imageName={imageName}
@@ -718,7 +736,6 @@ export default function App() {
             onResizeHeightChange={setResizeHeight}
             onApplyResize={applyResize}
             // Cutout (Background Removal)
-            onAiCutout={handleAiRemoveBackground}
             cutoutColor={cutoutColor}
             onCutoutColorChange={setCutoutColor}
             cutoutTolerance={cutoutTolerance}
@@ -726,6 +743,7 @@ export default function App() {
             cutoutSoftness={cutoutSoftness}
             onCutoutSoftnessChange={setCutoutSoftness}
             onManualCutout={handleManualCutout}
+            onRemoveBlackBg={handleRemoveBlackBackground} // PASS NEW HANDLER
             // Color Adjust
             colorAdjustments={colorAdjustments}
             onColorAdjustmentsChange={setColorAdjustments}
@@ -739,17 +757,12 @@ export default function App() {
             onGridRowsChange={setGridRows}
             collageImages={collageImages}
             onCreateCollage={createCollage}
-            // AI Edit
-            aiPrompt={aiPrompt}
-            onAiPromptChange={setAiPrompt}
-            aiGenWidth={aiGenWidth}
-            onAiGenWidthChange={setAiGenWidth}
-            aiGenHeight={aiGenHeight}
-            onAiGenHeightChange={setAiGenHeight}
-            aiStyle={aiStyle}
-            onAiStyleChange={setAiStyle}
-            onAiEdit={handleAiEdit}
-            error={error}
+            // Convert
+            convertFormat={convertFormat}
+            onConvertFormatChange={setConvertFormat}
+            convertQuality={convertQuality}
+            onConvertQualityChange={setConvertQuality}
+            onConvertExport={handleConvertDownload}
           />
         )}
       </div>

@@ -1,7 +1,5 @@
-
 import React from 'react';
-import type { EditMode, CollageLayoutType, IconName, AiStyle } from '../../types';
-import { AI_STYLES } from '../../types';
+import type { EditMode, CollageLayoutType, IconName } from '../../types';
 import Icon from '../Icon';
 
 // A generic panel wrapper
@@ -43,6 +41,68 @@ const SliderControl: React.FC<{
         />
     </div>
 );
+
+const ConvertPanel: React.FC<{
+    format: string;
+    onFormatChange: (f: string) => void;
+    quality: number;
+    onQualityChange: (q: number) => void;
+    onExport: () => void;
+}> = ({ format, onFormatChange, quality, onQualityChange, onExport }) => {
+    const formats = [
+        { label: 'PNG', value: 'image/png' },
+        { label: 'JPEG', value: 'image/jpeg' },
+        { label: 'WEBP', value: 'image/webp' },
+    ];
+
+    return (
+        <PanelWrapper title="Format Conversion">
+             <div className="bg-[var(--bg-secondary)] rounded-lg p-4 space-y-6">
+                <div>
+                    <p className="text-sm text-[var(--color-text)] mb-3 font-medium">Output Format</p>
+                    <div className="grid grid-cols-3 gap-2">
+                        {formats.map((f) => (
+                            <button
+                                key={f.value}
+                                onClick={() => onFormatChange(f.value)}
+                                className={`py-2 px-1 rounded text-xs font-medium transition-colors ${
+                                    format === f.value
+                                        ? 'bg-[var(--color-accent)] text-black'
+                                        : 'bg-[var(--bg-panel)] text-[var(--color-text)] hover:bg-[var(--color-accent)] hover:text-black'
+                                }`}
+                            >
+                                {f.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {format !== 'image/png' && (
+                    <div className="pt-4 border-t border-[var(--bg-panel)]">
+                        <p className="text-sm text-[var(--color-text)] mb-3 font-medium">Quality</p>
+                         <SliderControl 
+                            label="Quality" 
+                            value={Math.round(quality * 100)} 
+                            min={1} 
+                            max={100} 
+                            onChange={(val) => onQualityChange(val / 100)} 
+                        />
+                    </div>
+                )}
+            </div>
+
+            <div className="flex-grow"></div>
+            <button 
+                onClick={onExport}
+                className="w-full flex justify-center items-center gap-2 bg-[var(--color-accent)] hover:opacity-90 text-black font-bold py-3 px-4 rounded-md transition-opacity"
+            >
+                <Icon name="download" className="w-5 h-5" />
+                Export Image
+            </button>
+        </PanelWrapper>
+    )
+};
+
 
 // Panel for Crop
 const CropPanel: React.FC<{
@@ -159,13 +219,33 @@ const RotatePanel: React.FC<{
 );
 
 // Panel for Grayscale
-const GrayscalePanel: React.FC<{ onGrayscale: () => void }> = ({ onGrayscale }) => (
+const GrayscalePanel: React.FC<{ onGrayscale: (type: 'max' | 'average' | 'weighted') => void }> = ({ onGrayscale }) => (
     <PanelWrapper title="Grayscale">
-        <div className="bg-[var(--bg-secondary)] rounded-lg p-4">
-            <p className="text-sm text-[var(--color-text)] mb-3 font-medium">Effect</p>
-            <button onClick={onGrayscale} className="w-full flex flex-row items-center justify-center gap-2 bg-[var(--color-accent)] hover:opacity-90 text-black font-bold py-3 px-4 rounded-md transition-opacity">
-                <Icon name="grayscale" className="w-5 h-5" />
-                <span className="text-sm font-medium">Apply Grayscale</span>
+        <div className="bg-[var(--bg-secondary)] rounded-lg p-4 space-y-3">
+            <p className="text-sm text-[var(--color-text)] font-medium">Algorithms</p>
+            
+            <button 
+                onClick={() => onGrayscale('max')} 
+                className="w-full flex flex-row items-center justify-center gap-2 bg-[var(--bg-panel)] hover:bg-[var(--color-accent)] hover:text-black text-[var(--color-text)] font-bold py-3 px-4 rounded-md transition-colors"
+            >
+                <Icon name="expand" className="w-5 h-5" />
+                <span className="text-sm font-medium">Max Value (VFX)</span>
+            </button>
+
+            <button 
+                onClick={() => onGrayscale('average')} 
+                className="w-full flex flex-row items-center justify-center gap-2 bg-[var(--bg-panel)] hover:bg-[var(--color-accent)] hover:text-black text-[var(--color-text)] font-bold py-3 px-4 rounded-md transition-colors"
+            >
+                <Icon name="palette" className="w-5 h-5" />
+                <span className="text-sm font-medium">Average (VFX)</span>
+            </button>
+
+            <button 
+                onClick={() => onGrayscale('weighted')} 
+                className="w-full flex flex-row items-center justify-center gap-2 bg-[var(--bg-panel)] hover:bg-[var(--color-accent)] hover:text-black text-[var(--color-text)] font-bold py-3 px-4 rounded-md transition-colors"
+            >
+                <Icon name="wand" className="w-5 h-5" />
+                <span className="text-sm font-medium">Weighted (Standard)</span>
             </button>
         </div>
     </PanelWrapper>
@@ -220,7 +300,6 @@ const ResizePanel: React.FC<{
 
 // Panel for Remove Background
 const CutoutPanel: React.FC<{
-    onAiCutout: () => void;
     cutoutColor: string;
     onCutoutColorChange: (color: string) => void;
     cutoutTolerance: number;
@@ -228,29 +307,18 @@ const CutoutPanel: React.FC<{
     cutoutSoftness: number;
     onCutoutSoftnessChange: (val: number) => void;
     onManualCutout: () => void;
+    onRemoveBlackBg: () => void;
 }> = ({ 
-    onAiCutout, 
     cutoutColor, 
     onCutoutColorChange, 
     cutoutTolerance, 
     onCutoutToleranceChange,
     cutoutSoftness,
     onCutoutSoftnessChange,
-    onManualCutout 
+    onManualCutout,
+    onRemoveBlackBg
 }) => (
     <PanelWrapper title="Cutout">
-        {/* AI Section */}
-        <div className="bg-[var(--bg-secondary)] rounded-lg p-4 space-y-3">
-            <p className="text-sm text-[var(--color-text)] font-medium">AI Auto Removal</p>
-            <button 
-                onClick={onAiCutout} 
-                className="w-full flex justify-center items-center gap-2 bg-[var(--color-accent)] hover:opacity-90 text-black font-bold py-3 px-4 rounded-md transition-opacity"
-            >
-                <Icon name="wand" className="w-5 h-5" />
-                Remove Background
-            </button>
-        </div>
-
         {/* Manual Section */}
         <div className="bg-[var(--bg-secondary)] rounded-lg p-4 space-y-4">
             {/* Updated: border-bg-app -> border-bg-panel */}
@@ -294,111 +362,15 @@ const CutoutPanel: React.FC<{
             >
                 Remove Selected Color
             </button>
-        </div>
-    </PanelWrapper>
-);
 
-// Panel for AI Edit
-const AIEditPanel: React.FC<{ 
-    prompt: string;
-    onPromptChange: (p: string) => void;
-    genWidth: number;
-    onGenWidthChange: (w: number) => void;
-    genHeight: number;
-    onGenHeightChange: (h: number) => void;
-    style: AiStyle;
-    onStyleChange: (s: AiStyle) => void;
-    onGenerate: () => void;
-    isProcessing: boolean;
-    error: string | null;
-}> = ({ prompt, onPromptChange, genWidth, onGenWidthChange, genHeight, onGenHeightChange, style, onStyleChange, onGenerate, isProcessing, error }) => (
-    <PanelWrapper title="AI Edit">
-        
-        {/* Dimensions Section */}
-        <div className="bg-[var(--bg-secondary)] rounded-lg p-4 space-y-4">
-             {/* Updated: border-bg-app -> border-bg-panel */}
-             <p className="text-sm text-[var(--color-text)] font-medium border-b border-[var(--bg-panel)] pb-2">Output Dimensions</p>
-            <div className="flex items-center justify-between text-sm text-[var(--color-text)]">
-                <label className="font-medium">Width</label>
-                {/* Updated: bg-app -> bg-panel */}
-                <div className="flex items-center bg-[var(--bg-panel)] rounded-md border border-[var(--bg-secondary)] w-28">
-                    <input
-                        type="number"
-                        value={genWidth}
-                        onChange={(e) => onGenWidthChange(parseInt(e.target.value, 10) || 0)}
-                        className="w-full bg-transparent p-1.5 text-center text-[var(--color-text)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)] rounded-md"
-                    />
-                    <span className="text-gray-500 text-xs pr-3 select-none">px</span>
-                </div>
-            </div>
-            <div className="flex items-center justify-between text-sm text-[var(--color-text)]">
-                <label className="font-medium">Height</label>
-                {/* Updated: bg-app -> bg-panel */}
-                <div className="flex items-center bg-[var(--bg-panel)] rounded-md border border-[var(--bg-secondary)] w-28">
-                    <input
-                        type="number"
-                        value={genHeight}
-                        onChange={(e) => onGenHeightChange(parseInt(e.target.value, 10) || 0)}
-                        className="w-full bg-transparent p-1.5 text-center text-[var(--color-text)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)] rounded-md"
-                    />
-                    <span className="text-gray-500 text-xs pr-3 select-none">px</span>
-                </div>
-            </div>
+            <button 
+                onClick={onRemoveBlackBg} 
+                className="w-full flex justify-center items-center gap-2 bg-[var(--bg-panel)] hover:bg-[var(--color-accent)] hover:text-black text-[var(--color-text)] font-bold py-3 px-4 rounded-md transition-colors mt-2"
+                title="Converts black background to transparency (Unmultiply)"
+            >
+                Remove Black Background
+            </button>
         </div>
-
-        {/* Style Section */}
-        <div className="bg-[var(--bg-secondary)] rounded-lg p-4 space-y-3">
-            <p className="text-sm text-[var(--color-text)] font-medium">Artistic Style</p>
-            <div className="relative">
-                {/* Updated: bg-app -> bg-panel */}
-                <select 
-                    value={style}
-                    onChange={(e) => onStyleChange(e.target.value as AiStyle)}
-                    className="w-full bg-[var(--bg-panel)] border border-[var(--bg-secondary)] text-[var(--color-text)] rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] appearance-none"
-                >
-                    {AI_STYLES.map(s => (
-                        <option key={s} value={s}>{s}</option>
-                    ))}
-                </select>
-                {/* Custom arrow for styling consistency */}
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--color-text)]">
-                    <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
-                </div>
-            </div>
-        </div>
-
-        {/* Prompt Section */}
-        <div className="space-y-2">
-            <p className="text-sm text-[var(--color-text)] opacity-70">Prompt</p>
-            <textarea
-                value={prompt}
-                onChange={(e) => onPromptChange(e.target.value)}
-                placeholder="Describe your edit..."
-                className="w-full h-28 bg-[var(--bg-panel)] border border-[var(--bg-secondary)] rounded-lg p-3 text-[var(--color-text)] focus:ring-1 focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)] resize-none placeholder-gray-500"
-            />
-        </div>
-
-        {error && <p className="text-sm text-red-400 bg-red-900/20 p-2 rounded border border-red-900">{error}</p>}
-        
-        <div className="flex-grow"></div>
-        
-        <button 
-            onClick={onGenerate} 
-            disabled={isProcessing || !prompt}
-            className="w-full flex justify-center items-center gap-2 bg-[var(--color-accent)] hover:opacity-90 text-black font-bold py-3 px-4 rounded-md transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-            {isProcessing ? (
-                <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-black"></div>
-                    Generating...
-                </>
-            ) : (
-                <>
-                    <Icon name="wand" className="w-5 h-5" />
-                    Generate Edit
-                </>
-            )}
-        </button>
     </PanelWrapper>
 );
 
@@ -539,7 +511,7 @@ interface PropertiesPanelProps {
     onRotationAngleChange: (angle: number) => void;
     onApplyCustomRotation: () => void;
     // Grayscale
-    onGrayscale: () => void;
+    onGrayscale: (type: 'max' | 'average' | 'weighted') => void; // Updated prop type
     // Resize
     resizeWidth: number;
     onResizeWidthChange: (w: number) => void;
@@ -550,7 +522,6 @@ interface PropertiesPanelProps {
     onApplyCrop: () => void;
     setCropAspectRatio: (ratio: number | null) => void;
     // Cutout (Background Removal)
-    onAiCutout: () => void;
     cutoutColor: string;
     onCutoutColorChange: (color: string) => void;
     cutoutTolerance: number;
@@ -558,6 +529,7 @@ interface PropertiesPanelProps {
     cutoutSoftness: number;
     onCutoutSoftnessChange: (val: number) => void;
     onManualCutout: () => void;
+    onRemoveBlackBg: () => void;
     // Color Adjust
     colorAdjustments: { hue: number; saturation: number; brightness: number };
     onColorAdjustmentsChange: React.Dispatch<React.SetStateAction<{ hue: number; saturation: number; brightness: number }>>;
@@ -571,17 +543,12 @@ interface PropertiesPanelProps {
     onGridRowsChange: (rows: number) => void;
     collageImages: HTMLImageElement[];
     onCreateCollage: () => void;
-    // AI Edit
-    aiPrompt: string;
-    onAiPromptChange: (p: string) => void;
-    aiGenWidth: number;
-    onAiGenWidthChange: (w: number) => void;
-    aiGenHeight: number;
-    onAiGenHeightChange: (h: number) => void;
-    aiStyle: AiStyle;
-    onAiStyleChange: (s: AiStyle) => void;
-    onAiEdit: () => void;
-    error: string | null;
+    // Convert
+    convertFormat: string;
+    onConvertFormatChange: (f: string) => void;
+    convertQuality: number;
+    onConvertQualityChange: (q: number) => void;
+    onConvertExport: () => void;
 }
 
 // Main component that renders the correct panel
@@ -610,7 +577,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = (props) => {
                 />;
             case 'remove-bg':
                 return <CutoutPanel 
-                    onAiCutout={props.onAiCutout}
                     cutoutColor={props.cutoutColor}
                     onCutoutColorChange={props.onCutoutColorChange}
                     cutoutTolerance={props.cutoutTolerance}
@@ -618,20 +584,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = (props) => {
                     cutoutSoftness={props.cutoutSoftness}
                     onCutoutSoftnessChange={props.onCutoutSoftnessChange}
                     onManualCutout={props.onManualCutout}
-                />;
-            case 'ai-edit':
-                 return <AIEditPanel 
-                    prompt={props.aiPrompt}
-                    onPromptChange={props.onAiPromptChange}
-                    genWidth={props.aiGenWidth}
-                    onGenWidthChange={props.onAiGenWidthChange}
-                    genHeight={props.aiGenHeight}
-                    onGenHeightChange={props.onAiGenHeightChange}
-                    style={props.aiStyle}
-                    onStyleChange={props.onAiStyleChange}
-                    onGenerate={props.onAiEdit}
-                    isProcessing={props.isProcessing}
-                    error={props.error}
+                    onRemoveBlackBg={props.onRemoveBlackBg} 
                 />;
             case 'color-adjust':
                 return <ColorAdjustPanel
@@ -641,6 +594,14 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = (props) => {
                 />;
             case 'collage':
                 return <CollagePanel {...props} />;
+            case 'convert':
+                return <ConvertPanel 
+                    format={props.convertFormat}
+                    onFormatChange={props.onConvertFormatChange}
+                    quality={props.convertQuality}
+                    onQualityChange={props.onConvertQualityChange}
+                    onExport={props.onConvertExport}
+                />
             default:
                 return null;
         }

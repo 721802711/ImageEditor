@@ -1,4 +1,3 @@
-
 import React from 'react';
 import type { EditMode, IconName } from '../../types';
 import Icon from '../Icon';
@@ -34,7 +33,7 @@ const HomeView: React.FC<HomeViewProps> = ({ onSelection }) => {
                 <FeatureCard icon="erase" label="Cutout" onClick={() => onSelection('remove-bg')} />
                 <FeatureCard icon="palette" label="Adjust" onClick={() => onSelection('color-adjust')} />
                 <FeatureCard icon="collage" label="Collage" onClick={() => onSelection('collage')} />
-                <FeatureCard icon="wand" label="AI Edit" onClick={() => onSelection('ai-edit')} />
+                <FeatureCard icon="file-type" label="Converter" onClick={() => onSelection('convert')} />
             </div>
         </div>
     );

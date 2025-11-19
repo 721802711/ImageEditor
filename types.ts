@@ -1,5 +1,4 @@
-
-export type EditMode = 'none' | 'rotate' | 'resize' | 'crop' | 'grayscale' | 'collage' | 'remove-bg' | 'color-adjust' | 'ai-edit';
+export type EditMode = 'none' | 'rotate' | 'resize' | 'crop' | 'grayscale' | 'collage' | 'remove-bg' | 'color-adjust' | 'convert';
 
 export type IconName = 
   | 'upload' 
@@ -12,7 +11,6 @@ export type IconName =
   | 'add' 
   | 'close' 
   | 'reset'
-  | 'wand'
   | 'palette'
   | 'undo'
   | 'save'
@@ -30,9 +28,7 @@ export type IconName =
   | 'ratio-1-1'
   | 'ratio-16-9'
   | 'ratio-4-3'
-  | 'settings';
+  | 'settings'
+  | 'file-type';
 
 export type CollageLayoutType = 'horizontal' | 'vertical' | 'grid';
-
-export type AiStyle = 'None' | 'Realistic' | 'Anime' | 'Cartoon' | 'Oil Painting' | 'Cyberpunk' | 'Sketch' | 'Watercolor' | '3D Render';
-export const AI_STYLES: AiStyle[] = ['None', 'Realistic', 'Anime', 'Cartoon', 'Oil Painting', 'Cyberpunk', 'Sketch', 'Watercolor', '3D Render'];
