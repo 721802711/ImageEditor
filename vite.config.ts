@@ -10,14 +10,21 @@ export default defineConfig(({ mode }) => {
         host: '0.0.0.0',
       },
       plugins: [react()],
+      optimizeDeps: {
+        include: ['@google/genai']
+      },
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
         'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
       },
       resolve: {
         alias: {
-          // Fix: Replaced `__dirname` to prevent TypeScript errors. `.` resolves to the project root.
           '@': path.resolve('.'),
+        }
+      },
+      build: {
+        commonjsOptions: {
+          include: [/@google\/genai/, /node_modules/]
         }
       }
     };
